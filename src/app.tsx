@@ -21,8 +21,8 @@ useEffect(() => {
    console.log("Message received from Figma:", event.data);
 
    
-const testingText = await translateTextWithAWS("Hello, how are you?", "German");
-console.log("Translated text for testing:", testingText);
+// const testingText = await translateTextWithAWS("Hello, how are you?", "German");
+// console.log("Translated text for testing:", testingText);
 
 
    if (event.data?.pluginMessage) {
@@ -34,20 +34,25 @@ console.log("Translated text for testing:", testingText);
      if (pluginMessage?.type === "frame-selected") {
        
        const frameId = pluginMessage.frameId || null;
-       const originalText = pluginMessage.originalText || "Hello, how are you?";
+       const originalText = pluginMessage.texts ;
 
        console.log("Frame ID:", frameId);
        console.log("Texts received:", originalText);
 
       if (originalText.length > 0) {
           try {
+            console.log("language:", language);
+            console.log("original text:", originalText);
             // Translate the text
-            const translatedText = await translateTextWithAWS(originalText, language);
+            const textToTranslate = originalText.map((textObj: { content: string}) => textObj.content).join(" ");
+            console.log("Text to translate:", textToTranslate);
+
+            const translatedText = await translateTextWithAWS(textToTranslate, language);
             console.log("Translated text:", translatedText);
 
             // Send translated text back to the Figma code.ts environment
             parent.postMessage(
-              { pluginMessage: {type: "translation-complete", frameId , translateText}}, 
+              { pluginMessage: {type: "translation-complete", frameId , translatedText}}, 
             "*"
           );
 
@@ -72,7 +77,7 @@ console.log("Translated text for testing:", testingText);
  return () => {
    window.removeEventListener("message", handleMessage);
  };
-}, []);
+}, [language]);
 
   const createRecord = async (originalText: string, frameId: string, translatedText: string) => {
     if (!validateLanguage(language)) {
