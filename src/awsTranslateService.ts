@@ -2,62 +2,66 @@ import { BedrockRuntimeClient, InvokeModelCommand } from "@aws-sdk/client-bedroc
 
 
 const client = new BedrockRuntimeClient({
-    region: "eu-central-1",
-    credentials: {
-        accessKeyId: import.meta.env.VITE_AWS_ACCESS_KEY_ID,
-        secretAccessKey: import.meta.env.VITE_AWS_SECRET_ACCESS_KEY,
-    },
+  region: "eu-central-1",
+  credentials: {
+    accessKeyId: import.meta.env.VITE_AWS_ACCESS_KEY_ID,
+    secretAccessKey: import.meta.env.VITE_AWS_SECRET_ACCESS_KEY,
+  },
 });
 
 // Define the modelId for Claude 3 (Sonnet)
 const modelId = "eu.anthropic.claude-3-5-sonnet-20240620-v1:0";
 
 
-// Helper to convert ReadableStream to a string
-async function streamToString(stream: ReadableStream<Uint8Array>): Promise<string> {
-  const reader = stream.getReader();
-  const decoder = new TextDecoder();
-  let result = "";
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    result += decoder.decode(value, { stream: true });
-  }
-
-  return result;
-}
-
-
-
-
 export async function translateTextWithAWS(text: string, targetLanguage: string): Promise<string> {
-    // Construct the prompt for Claude
-  const prompt = `Translate the following text to ${targetLanguage}: ${text}`;
-    
-   //define parameters for model ID
-   const params = {
-    modelId: modelId,
-    body: JSON.stringify({
-        inputs: prompt,
-        parameters: {
-            max_tokens: 200,
-        },
-    }),
-   };
+  // Construct the prompt configuration similar to the Python structure
+  console.log("Calling AWS Bedrock with text:", text, "Target language:", targetLanguage);
 
-   //Send Req. to AWS
-   const command = new InvokeModelCommand(params);
+  const promptConfig = {
+    anthropic_version: "bedrock-2023-05-31",
+    messages: [
+      {
+        role: "user",
+        content: [
+          { type: "text", text: `Translate the following text to ${targetLanguage}: ${text}`, },
+        ],
+      },
+    ],
+    max_tokens: 4096,
+  };
 
-   try {
+  const params = {
+    modelId,
+    body: JSON.stringify(promptConfig),
+    contentType: "application/json",
+    accept: "application/json",
+  };
 
+  const command = new InvokeModelCommand(params);
+
+  try {
     const response = await client.send(command);
     console.log("AWS Response:", response);
-    const responseBody = await streamToString(response.body as unknown as ReadableStream<Uint8Array>);
-    const result = JSON.parse(responseBody);
 
-    // Return the generated translation or fallback text
-    return result.generated_text || "Translation failed.";
+    if (response.body) {
+      const decoder = new TextDecoder("utf-8");
+      const decodeResponse = decoder.decode(response.body as Uint8Array);
+
+      const responseBody = JSON.parse(decodeResponse);
+      console.log("Decoded AWS Response:", responseBody);
+
+
+      if (responseBody.content && responseBody.content.length > 0) {
+        const translatedText = responseBody.content[0].text;
+        return translatedText || "Translation failed.";
+      } else {
+        console.warn("No translation content found in the response.");
+        return "Translation content is missing.";
+      }
+    } else {
+      console.warn("No response body received from the model.");
+      return "No response body received.";
+    }
   } catch (error) {
     console.error("Error during translation:", error);
     return "Translation failed due to an error.";

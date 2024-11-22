@@ -14,7 +14,65 @@ export function App() {
     const supportedLanguage = ["en", "es", "fr", "de"];
     return supportedLanguage.includes(language);
   }
+  
+  // Handle receiving messages from Figma
+useEffect(() => {
+ const handleMessage = async (event: MessageEvent) => {
+   console.log("Message received from Figma:", event.data);
 
+   
+const testingText = await translateTextWithAWS("Hello, how are you?", "German");
+console.log("Translated text for testing:", testingText);
+
+
+   if (event.data?.pluginMessage) {
+     const { pluginMessage } = event.data;
+
+     
+     console.log("Plugin message content:", pluginMessage);
+
+     if (pluginMessage?.type === "frame-selected") {
+       
+       const frameId = pluginMessage.frameId || null;
+       const originalText = pluginMessage.originalText || "Hello, how are you?";
+
+       console.log("Frame ID:", frameId);
+       console.log("Texts received:", originalText);
+
+      if (originalText.length > 0) {
+          try {
+            // Translate the text
+            const translatedText = await translateTextWithAWS(originalText, language);
+            console.log("Translated text:", translatedText);
+
+            // Send translated text back to the Figma code.ts environment
+            parent.postMessage(
+              { pluginMessage: {type: "translation-complete", frameId , translateText}}, 
+            "*"
+          );
+
+            // Save the translation record to Supabase
+            await createRecord(originalText, frameId , translatedText);
+            console.log("Record saved to Supabase successfully.");
+          } catch (error) {
+            console.error("Error during translation or saving record:", error);
+          }
+        } else {
+          console.log("No text selected.");
+        }
+      } else {
+        console.log("Unhandled plugin message type:", pluginMessage?.type);
+      }
+    }
+ };
+
+ window.addEventListener("message", handleMessage);
+
+ // Cleanup the event listener on unmount
+ return () => {
+   window.removeEventListener("message", handleMessage);
+ };
+}, []);
 
   const createRecord = async (originalText: string, frameId: string, translatedText: string) => {
     if (!validateLanguage(language)) {
@@ -48,50 +106,19 @@ export function App() {
       console.log("Error fetching records:", error);
     }
   }
-
-
-
-   // Handle receiving messages from Figma
-  useEffect(() => {
-    const handleMessage = async (event: MessageEvent) => {
-      const { pluginMessage } = event.data;
-      if (pluginMessage?.type === "originalText") {
-        const originalText = pluginMessage.text;
-        const frameId = pluginMessage.frameId;
-
-        console.log("Received original text:", originalText, "from frame:", frameId);
-
-        try {
-          // Call the AWS translation service
-          const translatedText = await translateTextWithAWS(originalText, language);
-          console.log("Translated Text:", translatedText);
-
-          // Save the original and translated text in Supabase
-          await createRecord(originalText, frameId, translatedText);
-
-          // Send the translated text back to the Figma plugin
-          parent.postMessage({ pluginMessage: { type: "translate", text: translatedText } }, "*");
-        } catch (error) {
-          console.error("Error during translation:", error);
-        }
-      }
-    };
-
-    window.addEventListener("message", handleMessage);
-
-    // Cleanup the event listener on unmount
-    return () => {
-      window.removeEventListener("message", handleMessage);
-    };
-  }, [language]);
-
-
+  
+  
+  useEffect(()=> {
+    getRecord();
+  }, [])
 
   
+
     // Trigger translation
   const translateText = () => {
     console.log("Selected language:", language);
-    parent.postMessage({ pluginMessage: { type: "getOriginalText" } }, "*");
+    console.log("Sending message to get original text");
+    parent.postMessage({ pluginMessage: { type: "translate",language  } }, "*");
   };
 
   function editText() {
@@ -107,9 +134,6 @@ export function App() {
     setLanguage(target.value);
   };
 
-  useEffect(()=> {
-    getRecord();
-  }, [])
 
 
   return (
