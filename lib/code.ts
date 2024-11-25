@@ -47,30 +47,46 @@ figma.ui.onmessage = async (msg) => {
     // Handle completed translation and apply the translated text
     if (msg.type === "translation-complete") {
       const { frameId, translatedText } = msg;
-      console.log("Translated text on Figma Frame:", translatedText);
+
+      console.log("Translation-complete received with Frame ID:", frameId);
 
       try {
-        const frame = figma.getNodeById(frameId) as FrameNode;
-        if (!frame) throw new Error(`Frame with ID ${frameId} not found.`);
+        const frame = await figma.getNodeByIdAsync(frameId);
+        if (!frame || frame.type !== "FRAME") {
+          console.error(`Frame not found or invalid type for ID: ${frameId}`);
+          figma.notify(`Frame with ID ${frameId} not found.`);
+          return;
+        }
 
         const textNodes = frame.findAll((node) => node.type === "TEXT") as TextNode[];
+        console.log(`Found ${textNodes.length} text nodes in frame with ID: ${frameId}`);
 
-        // Load font for each text node before applying the translation
+        if (textNodes.length === 0) {
+          figma.notify("No text found to translate in this frame.");
+          return;
+        }
+
         for (const textNode of textNodes) {
-          await figma.loadFontAsync(textNode.fontName as FontName);
-          textNode.characters = translatedText;
+          try {
+            await figma.loadFontAsync(textNode.fontName as FontName);
+            textNode.characters = translatedText;
 
-          // Store the translated text as the new "original" text
-          originalTextMap.set(textNode.id, translatedText);
+            console.log(`Updated textNode ${textNode.id} with text: ${translatedText}`);
+            originalTextMap.set(textNode.id, translatedText);
+          } catch (error) {
+            console.error(`Failed to load font or update text for node ${textNode.id}`, error);
+            figma.notify("Error updating text. Check console for details.");
+          }
         }
 
         figma.notify("Text updated with translation.");
-
       } catch (error) {
         console.error("Error applying translation:", error);
         figma.notify("Failed to apply translation. Check console for details.");
       }
     }
+
+
   }
 
 

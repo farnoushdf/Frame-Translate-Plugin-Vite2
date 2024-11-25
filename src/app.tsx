@@ -158,6 +158,8 @@ useEffect(() => {
         <option value="de">German</option>
       </select>
 
+      <br />
+
       <button id="translate-text" onClick={translateText}>Translate</button>
       <button id="edit-text" onClick={editText}>Edit</button>
       <button id="cancel" onClick={handleCancel}>Cancel</button>
