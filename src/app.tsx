@@ -1,7 +1,7 @@
 import { useEffect, useState } from "preact/hooks";
 import { createClient } from "@supabase/supabase-js";
 import { translateTextWithAWS } from "./awsTranslateService";
-// import languages from "./data/languages.json";
+import languages from "./data/languages.json";
 import "./app.css";
 
 const supabase = createClient(
@@ -12,14 +12,18 @@ export function App() {
   const [language, setLanguage] = useState<string>("en");
   const [originalText, setOriginalText] = useState<string>("");
   const [translatedText, setTranslatedText] = useState<string>("");
-  const [frameId, setFrameId] = useState<string>("");
   const [showTextAreas, setShowTextAreas] = useState<boolean>(false);
-  // const [searchQuery, setSearchQuery] = useState<string>("");
+  const [searchQuery, setSearchQuery] = useState<string>("");
+
+
+  //Search language
+  const filteredLanguages = languages.filter(lang => {
+    return lang.name.toLowerCase().includes(searchQuery.toLowerCase())
+  });
 
 
   const validateLanguage = (language: string): boolean => {
-    const supportedLanguage = ["en", "es", "fr", "de"];
-    return supportedLanguage.includes(language);
+    return languages.some((lang) => lang.code === language);
   }
   
   // Handle receiving messages from Figma
@@ -32,9 +36,7 @@ useEffect(() => {
      console.log("Plugin message content:", pluginMessage);
 
      if (pluginMessage?.type === "frame-selected") {
-      //  const frameIdFromMessage = pluginMessage.frameId || null;
-       setFrameId(pluginMessage.frameId || "");
-      //  const textContents = pluginMessage.texts;
+       const frameIdFromMessage = pluginMessage.frameId || null;
 
         // Extract the text content from the texts array
         const textContents = pluginMessage.texts.map((textObj: { content: string }) => textObj.content).join(" ");
@@ -44,6 +46,7 @@ useEffect(() => {
      
     console.log("language:", language);
     console.log("Original text:", textContents);
+    console.log("frame ID:", frameIdFromMessage);
 
     if (textContents.trim() !== "") {
 
@@ -53,7 +56,7 @@ useEffect(() => {
       setShowTextAreas(true); 
   
       // Create a record in the database
-      createRecord(originalText, frameId, translatedText);
+      createRecord(textContents, frameIdFromMessage, translatedText);
     } else {
       console.warn("No original text available to translate.");
     }
@@ -103,21 +106,21 @@ useEffect(() => {
   }
 
   // Fetch all translation record
-  const getRecord = async () => {
-    try {
-       const { data } = await supabase
-      .from("translations")
-      .select("*");
-      console.log("Fetched records:", data);
-    } catch (error) {
-      console.log("Error fetching records:", error);
-    }
-  }
+  // const getRecord = async () => {
+  //   try {
+  //      const { data } = await supabase
+  //     .from("translations")
+  //     .select("*");
+  //     console.log("Fetched records:", data);
+  //   } catch (error) {
+  //     console.log("Error fetching records:", error);
+  //   }
+  // }
   
   
-  useEffect(()=> {
-    getRecord();
-  }, [])
+  // useEffect(()=> {
+  //   getRecord();
+  // }, [])
 
   
 
@@ -143,23 +146,36 @@ useEffect(() => {
     setLanguage(target.value);
   };
 
+  const handleSearchChange = (e: Event) => {
+    const target = e.target as HTMLInputElement;
+    setSearchQuery(target.value);
+  }
 
 
   return (
     <>
       <h2>"Gleef Translate"</h2>
-      <p>Select a frame and translate the text to "Gleef Translate"</p>
+      <p>Select a frame and translate your text</p>
 
       <label htmlFor="language-select">Choose a language:</label>
+      <input 
+      type="text"
+      placeholder="Search language..."
+      value={searchQuery}
+      onInput={handleSearchChange}
+      style={{ width: "100%", padding: "5px", marginBottom: "10px" }}
+      />
+
       <select
         id="language-select"
         value={language}
         onChange={handleLanguageChange}
       >
-        <option value="en">English</option>
-        <option value="es">Spanish</option>
-        <option value="fr">French</option>
-        <option value="de">German</option>
+        {filteredLanguages.map((lang) => (
+          <option key={lang.code} value={lang.code}>
+            {lang.name}
+          </option>
+        ))}
       </select>
 
       <br />
