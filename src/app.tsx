@@ -1,6 +1,7 @@
 import { useEffect, useState } from "preact/hooks";
 import { createClient } from "@supabase/supabase-js";
 import { translateTextWithAWS } from "./awsTranslateService";
+// import languages from "./data/languages.json";
 import "./app.css";
 
 const supabase = createClient(
@@ -9,6 +10,12 @@ const supabase = createClient(
 );
 export function App() {
   const [language, setLanguage] = useState<string>("en");
+  const [originalText, setOriginalText] = useState<string>("");
+  const [translatedText, setTranslatedText] = useState<string>("");
+  const [frameId, setFrameId] = useState<string>("");
+  const [showTextAreas, setShowTextAreas] = useState<boolean>(false);
+  // const [searchQuery, setSearchQuery] = useState<string>("");
+
 
   const validateLanguage = (language: string): boolean => {
     const supportedLanguage = ["en", "es", "fr", "de"];
@@ -20,54 +27,49 @@ useEffect(() => {
  const handleMessage = async (event: MessageEvent) => {
    console.log("Message received from Figma:", event.data);
 
-   
-// const testingText = await translateTextWithAWS("Hello, how are you?", "German");
-// console.log("Translated text for testing:", testingText);
-
-
    if (event.data?.pluginMessage) {
      const { pluginMessage } = event.data;
-
-     
      console.log("Plugin message content:", pluginMessage);
 
      if (pluginMessage?.type === "frame-selected") {
-       
-       const frameId = pluginMessage.frameId || null;
-       const originalText = pluginMessage.texts ;
+      //  const frameIdFromMessage = pluginMessage.frameId || null;
+       setFrameId(pluginMessage.frameId || "");
+      //  const textContents = pluginMessage.texts;
 
-       console.log("Frame ID:", frameId);
-       console.log("Texts received:", originalText);
+        // Extract the text content from the texts array
+        const textContents = pluginMessage.texts.map((textObj: { content: string }) => textObj.content).join(" ");
+        setOriginalText(textContents);    
 
-      if (originalText.length > 0) {
-          try {
-            console.log("language:", language);
-            console.log("original text:", originalText);
-            // Translate the text
-            const textToTranslate = originalText.map((textObj: { content: string}) => textObj.content).join(" ");
-            console.log("Text to translate:", textToTranslate);
+    
+     
+    console.log("language:", language);
+    console.log("Original text:", textContents);
 
-            const translatedText = await translateTextWithAWS(textToTranslate, language);
-            console.log("Translated text:", translatedText);
+    if (textContents.trim() !== "") {
 
-            // Send translated text back to the Figma code.ts environment
-            parent.postMessage(
-              { pluginMessage: {type: "translation-complete", frameId , translatedText}}, 
-            "*"
-          );
+      // Call AWS translation service
+      const translatedText = await translateTextWithAWS(textContents, language);
+      setTranslatedText(translatedText);
+      setShowTextAreas(true); 
+  
+      // Create a record in the database
+      createRecord(originalText, frameId, translatedText);
+    } else {
+      console.warn("No original text available to translate.");
+    }
 
-            // Save the translation record to Supabase
-            await createRecord(originalText, frameId , translatedText);
-            console.log("Record saved to Supabase successfully.");
-          } catch (error) {
-            console.error("Error during translation or saving record:", error);
-          }
-        } else {
-          console.log("No text selected.");
-        }
-      } else {
-        console.log("Unhandled plugin message type:", pluginMessage?.type);
-      }
+    
+
+
+        //  if (textContents.length > 0) {
+        //   const textToTranslate = textContents
+        //     .map((textObj: { content: string }) => textObj.content)
+        //     .join(" ");
+        //   setOriginalText(textToTranslate);
+        //   setTranslatedText(""); // Reset translated text
+        //   setFrameId(frameIdFromMessage);
+        // }
+      } 
     }
  };
 
@@ -121,13 +123,15 @@ useEffect(() => {
 
     // Trigger translation
   const translateText = () => {
-    console.log("Selected language:", language);
-    console.log("Sending message to get original text");
-    parent.postMessage({ pluginMessage: { type: "translate",language  } }, "*");
-  };
-
-  function editText() {
-    parent.postMessage({ pluginMessage: { type: "edit" } }, "*");
+     
+    parent.postMessage(
+      {
+        pluginMessage: {
+          type: "translate",
+        },
+      },
+      "*"
+    );
   };
 
   function handleCancel() {
@@ -161,8 +165,31 @@ useEffect(() => {
       <br />
 
       <button id="translate-text" onClick={translateText}>Translate</button>
-      <button id="edit-text" onClick={editText}>Edit</button>
+    
       <button id="cancel" onClick={handleCancel}>Cancel</button>
+
+      {showTextAreas && (
+        <div style={{ marginTop: "20px" }}>
+          <h3>Original Text</h3>
+          <textarea
+            value={originalText}
+            onChange={(e) => setOriginalText((e.target as HTMLTextAreaElement).value)}
+            style={{ width: "100%", height: "100px" }}
+          ></textarea>
+
+          <h3>Translated Text</h3>
+          <textarea
+            value={translatedText}
+            readOnly
+            style={{ width: "100%", height: "100px" }}
+          ></textarea>
+        </div>
+      )}
     </>
   );
 }
+
+
+
+
+

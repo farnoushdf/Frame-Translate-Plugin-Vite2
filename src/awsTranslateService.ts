@@ -14,6 +14,12 @@ const modelId = "eu.anthropic.claude-3-5-sonnet-20240620-v1:0";
 
 
 export async function translateTextWithAWS(text: string, targetLanguage: string): Promise<string> {
+  // Ensure text is not empty or undefined
+  if (!text || text.trim() === "") {
+    console.error("No text provided for translation.");
+    return "Translation failed: No text provided.";
+  }
+  
   // Construct the prompt configuration similar to the Python structure
   console.log("Calling AWS Bedrock with text:", text, "Target language:", targetLanguage);
 
