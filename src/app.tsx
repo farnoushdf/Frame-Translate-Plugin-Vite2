@@ -57,6 +57,15 @@ useEffect(() => {
   
       // Create a record in the database
       createRecord(textContents, frameIdFromMessage, translatedText);
+
+      // Send translation-complete message to Figma (parent)
+      parent.postMessage({
+        pluginMessage: {
+          type: "translation-complete",
+          frameId: frameIdFromMessage,
+          translatedText,
+        },
+      }, "*" );
     } else {
       console.warn("No original text available to translate.");
     }
