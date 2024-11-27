@@ -29,7 +29,7 @@ export async function translateTextWithAWS(text: string, targetLanguage: string)
       {
         role: "user",
         content: [
-          { type: "text", text: `Translate the following text to ${targetLanguage}: ${text}`, },
+          { type: "text", text: `Translate the following text into ${targetLanguage}. Do not include extra comments or explanations. Text: "${text}"`, },
         ],
       },
     ],
