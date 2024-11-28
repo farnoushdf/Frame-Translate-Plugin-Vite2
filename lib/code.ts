@@ -14,6 +14,7 @@ figma.ui.onmessage = async (msg) => {
     for (const node of selection) {
       if (node.type === "FRAME") {
         const textNodes = node.findAll((child) => child.type === "TEXT") as TextNode[];
+        console.log("Text nodes found:", textNodes);
 
         if (textNodes.length === 0) {
           figma.notify("No text nodes found in the selected frame.");
@@ -25,9 +26,15 @@ figma.ui.onmessage = async (msg) => {
           id: textNode.id,
           content: textNode.characters,
         }));
+        console.log("Extracted texts:", texts);
 
         // Send the text to the UI
         figma.ui.postMessage({
+          type: "frame-selected",
+          frameId: node.id,
+          texts,
+        });
+        console.log("Message sent to UI: ", {
           type: "frame-selected",
           frameId: node.id,
           texts,
@@ -36,6 +43,7 @@ figma.ui.onmessage = async (msg) => {
         //store original text before translating
         for (const textNode of textNodes) {
           originalTextMap.set(textNode.id, textNode.characters);
+          console.log(`Original text stored: [${textNode.id}] = ${textNode.characters}`);
         }
       }
     }
@@ -48,14 +56,15 @@ figma.ui.onmessage = async (msg) => {
 
     try {
       const frame = await figma.getNodeByIdAsync(frameId);
-      if ( !frame || frame.type !== "FRAME") {
+      if (!frame || frame.type !== "FRAME") {
         figma.notify(`Frame with ID ${frameId} not found.`);
         return;
       }
 
-      const textNodes = frame.findAll((node) => node.type ==="TEXT") as TextNode[];
+      const textNodes = frame.findAll((node) =>
+        node.type === "TEXT") as TextNode[];
 
-      if ( textNodes.length === 0 ){
+      if (textNodes.length === 0) {
         figma.notify("No text found to translate in this frame.");
         return;
       }
@@ -64,7 +73,7 @@ figma.ui.onmessage = async (msg) => {
       for (const textNode of textNodes) {
         await figma.loadFontAsync(textNode.fontName as fontName);
         textNode.characters = translatedText;
-        originalTextMap.set(textNode.id, textNode.translatedText);
+        // originalTextMap.set(textNode.id, textNode.translatedText);
       }
 
       figma.notify("Text updated with translation.");
@@ -74,6 +83,31 @@ figma.ui.onmessage = async (msg) => {
       figma.notify("Failed to apply translation. Check console for details.");
     }
   }
+
+  if (msg.type === "toggle-text") {
+    const { showOriginal } = msg;
+    for (const node of selection) {
+      if (node.type === "FRAME") {
+        const textNodes = node.findAll((child) =>
+          child.type === "TEXT") as TextNode[];
+
+        await figma.loadFontAsync({ family: "Inter", style: "Regular" });
+
+        for (const textNode of textNodes) {
+          const originalText = originalTextMap.get(textNode.id);
+          if ( showOriginal) {
+            textNode.characters = originalText;
+            figma.notify("Original text restored.")
+          }  else {
+            textNode.characters = msg.translatedText || "";
+            figma.notify("Translated text applied.")
+          }
+        
+        }
+      }
+    }
+  }
+
 
   if (msg.type === "cancel") {
     figma.closePlugin();
