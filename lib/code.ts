@@ -1,3 +1,5 @@
+
+
 // Define the originalTextMap for storing original text
 const originalTextMap = new Map<string, string>();
 
@@ -73,7 +75,7 @@ figma.ui.onmessage = async (msg) => {
       for (const textNode of textNodes) {
         await figma.loadFontAsync(textNode.fontName as fontName);
         textNode.characters = translatedText;
-        // originalTextMap.set(textNode.id, textNode.translatedText);
+        originalTextMap.set(textNode.id, textNode.translatedText);
       }
 
       figma.notify("Text updated with translation.");
@@ -85,27 +87,61 @@ figma.ui.onmessage = async (msg) => {
   }
 
   if (msg.type === "toggle-text") {
-    const { showOriginal } = msg;
+    const { showOriginal, translatedText, originalText } = msg;
+    console.log("Original text:", originalText);
+    console.log("Translated text for toggleing on Figma:", translatedText);
+
     for (const node of selection) {
       if (node.type === "FRAME") {
-        const textNodes = node.findAll((child) =>
-          child.type === "TEXT") as TextNode[];
-
-        await figma.loadFontAsync({ family: "Inter", style: "Regular" });
-
-        for (const textNode of textNodes) {
-          const originalText = originalTextMap.get(textNode.id);
-          if ( showOriginal) {
-            textNode.characters = originalText;
-            figma.notify("Original text restored.")
-          }  else {
-            textNode.characters = msg.translatedText || "";
-            figma.notify("Translated text applied.")
-          }
+        const textNodes = node.findAll((child) => {
+          return  child.type === "TEXT" }) as TextNode[];
         
+        for (const textNode of textNodes) {
+          await figma.loadFontAsync(textNode.fontName as FontName);
+
+          // Preserve original styles
+          const fontName = textNode.fontName;
+          const fontSize = textNode.fontSize;
+          const fills = textNode.fills;
+          console.log("Font name:", fontName);
+          console.log("Font size:", fontSize);
+          console.log("Font fill:", fills);
+
+
+          // Clear the text node content before applying new text
+          textNode.characters = "";
+          
+
+              if ( showOriginal) {
+                console.log("showOriginal:", showOriginal);
+                console.log("Original text:", originalText);
+                console.log("Translated text:", translatedText);
+
+                if (originalText !== undefined) {
+                  textNode.characters = originalText;
+
+                   // Reapply styles
+                  textNode.fontName = fontName;
+                  textNode.fontSize = fontSize as number;
+                  textNode.fills = fills;
+                }  else {
+                  console.warn(`No original text found for ${textNode.id}`);
+                }
+              } else {
+                console.log("showOriginal for translation:", showOriginal);
+                textNode.characters = translatedText || "";
+
+                 // Reapply styles
+                textNode.fontName = fontName;
+                textNode.fontSize = fontSize as number;
+                textNode.fills = fills;
+              }
         }
       }
     }
+    figma.notify(showOriginal ?
+       "Switched to original text" : 
+       "Switched to translated text");
   }
 
 

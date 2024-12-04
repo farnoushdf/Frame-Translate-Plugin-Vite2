@@ -15,6 +15,7 @@ export function App() {
   const [frameId, setFrameId] = useState<string | null>(null);
   const [preview, setPreview] =useState<boolean>(false);
   const [currentTextState, setCurrentTextState] = useState<"original" | "translated">("original");
+  const [isFirstToggle, setIsFirstToggle] = useState<boolean>(true);
 
   const validateLanguage = (language: string): boolean => {
     return languages.some((lang) => lang.code === language);
@@ -41,21 +42,21 @@ useEffect(() => {
         
         console.log("language:", language);  
 
-         const translated = await translateTextWithAWS(textContents, language);
-         setTranslatedText(translated);
-
-  parent.postMessage(
-  {
-    pluginMessage: {
-      originalText,
-      frameId,
-          translatedText: translated,
-          language,
-    },
-  },
-  "*"
-);
-}}
+        const translated = await translateTextWithAWS(textContents, language);
+        setTranslatedText(translated);
+        parent.postMessage(
+         {
+           pluginMessage: {
+           originalText,
+           frameId,
+           translatedText: translated,
+           language,
+           },
+          },
+           "*"
+         );
+      } 
+    }
 };
   
   window.addEventListener("message", handleMessage);
@@ -70,51 +71,60 @@ useEffect(() => {
 // Trigger translation
 const translateText = async () => {
   
-  setPreview(true);
+  setPreview(true); // Enable preview mode
  
-parent.postMessage(
-  {
-    pluginMessage: {
-      type: "translate",
-    },
-  },
-  "*"
-);
-};
-
-const handleConfirmTranslation = () => {
-  if (frameId) {
-    createRecord(originalText, frameId, translatedText);
-    parent.postMessage(
-      {
-        pluginMessage: {
-          type: "translation-complete",
-          frameId,
-          translatedText,
-        },
+  parent.postMessage(
+    {
+      pluginMessage: {
+        type: "translate",
       },
-      "*"
-    );
-  }
-  setPreview(false);
+    },
+    "*"
+  );
 };
 
 
- const undoTextChange = () => {
+  const handlePreviewToggle = () => {
     const showOriginal = currentTextState === "translated";
+    console.log("translated text for toggleing:", translatedText);
+
+    setCurrentTextState(showOriginal ? "original" : "translated");
+    // Send a toggle-text message to the Figma plugin
     parent.postMessage(
       {
         pluginMessage: {
           type: "toggle-text",
           frameId,
-          showOriginal,
+          originalText,
+          translatedText,
+          showOriginal, // true: show original; false: show translated
         },
       },
       "*"
     );
-    const newState = showOriginal ? "original" : "translated";
-    setCurrentTextState(newState);
   };
+
+
+
+
+const handleConfirmTranslation = () => {
+  if (frameId) {
+    createRecord(originalText, frameId, translatedText);
+    setCurrentTextState("translated"); // Ensure translated text is active
+    parent.postMessage(
+      {
+        pluginMessage: {
+        type: "translation-complete",
+        frameId,
+        translatedText,
+        },
+      },
+      "*"
+    );
+    console.log("Confirmed translation and updated Figma.");
+  }
+};
+
 
   const createRecord = async (originalText: string, frameId: string, translatedText: string) => {
     if (!validateLanguage(language)) {
@@ -154,7 +164,15 @@ const handleConfirmTranslation = () => {
     getRecord();
   }, [])
 
-  
+  // Handle the toggle click
+  const handleToggleClick = () => {
+    if (isFirstToggle) {
+      handleConfirmTranslation();
+      setIsFirstToggle(false); // Disable first toggle behavior after it's used
+    } else {
+      handlePreviewToggle();
+    }
+  };
 
 
 
@@ -164,7 +182,7 @@ const handleConfirmTranslation = () => {
       <p>Select a frame and translate your text</p>
 
       <label htmlFor="language-select">Choose a language:</label>
-     <select
+      <select
         id="language-select"
         value={language}
         onChange={(e) => setLanguage(
@@ -179,19 +197,36 @@ const handleConfirmTranslation = () => {
        ))}
       </select>
 
-      <button id="translate-text" onClick={translateText}>Translate</button>
-      <button onClick={undoTextChange}>Undo</button>
+      <button id="translate-text" 
+      onClick={translateText} 
+      style={{marginTop: "20px"}}>
+        Translate
+      </button>
+
       {preview && (
-        <div>
+        <div style={{ marginTop: "20px" }}>
           <h3>Preview Translation</h3>
           <textarea value={translatedText}
           onChange={(e) => setTranslatedText(
             (e.target as HTMLSelectElement)
             .value)}
-          style={{ width: "100%", height: "80px" }}></textarea>
-          <button onClick={handleConfirmTranslation}>Confirm</button>
+          style={{ width: "100%", height: "80px", marginBottom: "10px" }}></textarea>
         </div>
       )}
+
+      <label className="toggle-switch">
+        <span className="toggle-label-left">
+          {currentTextState === "original" ? 
+          "Apply to translated text" : "Back to original text"}
+        </span>
+        <input type="checkbox" 
+        checked={currentTextState === "translated"} 
+        onChange={handleToggleClick}
+        disabled={!translatedText} // Disable toggle if no translation is available
+        />
+        <span className="slider"></span>
+      </label>
+                                 
     </>
   );
 }
