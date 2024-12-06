@@ -16,6 +16,7 @@ export function App() {
   const [preview, setPreview] =useState<boolean>(false);
   const [currentTextState, setCurrentTextState] = useState<"original" | "translated">("original");
   const [isFirstToggle, setIsFirstToggle] = useState<boolean>(true);
+  const [loading, setLoading] = useState<boolean>(false);
 
   const validateLanguage = (language: string): boolean => {
     return languages.some((lang) => lang.code === language);
@@ -42,19 +43,33 @@ useEffect(() => {
         
         console.log("language:", language);  
 
-        const translated = await translateTextWithAWS(textContents, language);
-        setTranslatedText(translated);
-        parent.postMessage(
-         {
-           pluginMessage: {
-           originalText,
-           frameId,
-           translatedText: translated,
-           language,
-           },
-          },
-           "*"
-         );
+        setLoading(true);
+        console.log("spinner state: Loading started");
+
+        try {
+          const translated = await translateTextWithAWS(textContents, language);
+          setTranslatedText(translated);
+          
+          parent.postMessage(
+            {
+              pluginMessage: {
+                originalText,
+                frameId,
+                translatedText: translated,
+                language,
+              },
+            },
+            "*"
+          );
+        } catch (error) {
+          console.log("Translation error", error);
+        } finally {
+          // Hide spinner after translation
+          setLoading(false);
+          console.log("Spinner state: Loading finished");
+
+        }
+
       } 
     }
 };
@@ -71,16 +86,23 @@ useEffect(() => {
 // Trigger translation
 const translateText = async () => {
   
-  setPreview(true); // Enable preview mode
- 
-  parent.postMessage(
-    {
-      pluginMessage: {
-        type: "translate",
+  
+  try {
+    parent.postMessage(
+      {
+        pluginMessage: {
+          type: "translate",
+        },
       },
-    },
-    "*"
-  );
+      "*"
+    );
+  
+    setPreview(true); // Enable preview mode
+    
+  } catch (error) {
+    console.log("Translation error", error);
+  }
+  
 };
 
 
@@ -203,7 +225,11 @@ const handleConfirmTranslation = () => {
         Translate
       </button>
 
-      {preview && (
+      {loading && (
+        <div className="spinner" style={{marginTop: "20px"}}></div>
+      )}
+
+      {preview && !loading && (
         <div style={{ marginTop: "20px" }}>
           <h3>Preview Translation</h3>
           <textarea value={translatedText}
