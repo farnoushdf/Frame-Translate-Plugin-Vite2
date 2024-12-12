@@ -28,10 +28,8 @@ export async function translateTextWithAWS(text: string, targetLanguage: string)
     messages: [
       {
         role: "user",
-        content: [
-          { type: "text", text: `Translate the following text into ${targetLanguage}. Do not include extra comments or explanations. Text: "${text}"`, },
-        ],
-      },
+        content: `Translate the following text into ${targetLanguage}. Do not include extra comments or explanations. Text: "${text}"`, 
+       },
     ],
     max_tokens: 4096,
   };

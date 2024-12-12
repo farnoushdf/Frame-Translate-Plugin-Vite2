@@ -16,7 +16,8 @@ figma.ui.onmessage = async (msg) => {
     for (const node of selection) {
       if (node.type === "FRAME") {
         const textNodes = node.findAll((child) => child.type === "TEXT") as TextNode[];
-        console.log("Text nodes found:", textNodes);
+        const frameId = node.id;
+        console.log("Text nodes found && frameId:", textNodes + "," + frameId);
 
         if (textNodes.length === 0) {
           figma.notify("No text nodes found in the selected frame.");
@@ -27,13 +28,14 @@ figma.ui.onmessage = async (msg) => {
         const texts = textNodes.map((textNode) => ({
           id: textNode.id,
           content: textNode.characters,
+          frame_id: frameId,
         }));
         console.log("Extracted texts:", texts);
 
         // Send the text to the UI
         figma.ui.postMessage({
           type: "frame-selected",
-          frameId: node.id,
+          frameId,
           texts,
         });
         console.log("Message sent to UI: ", {
@@ -51,45 +53,40 @@ figma.ui.onmessage = async (msg) => {
     }
   }
 
-  if (msg.type === "translation-complete") {
-    const { frameId, translatedText } = msg;
-    console.log("Frame ID on Figma:", frameId);
-    console.log("Translated text on Figma:", translatedText);
+  if(msg.type === "update-frame-text") {
+    const { translations } = msg;  // `translations` is an array of { id, translatedText }
+    console.log("translations:", translations);
+    
+    for (const node of selection) {
+      if (node.type === "FRAME") {
+        const textNodes = node.findAll((child) => child.type === "TEXT") as TextNode[];
 
-    try {
-      const frame = await figma.getNodeByIdAsync(frameId);
-      if (!frame || frame.type !== "FRAME") {
-        figma.notify(`Frame with ID ${frameId} not found.`);
-        return;
+        for (const textNode of textNodes) {
+          const translation = translations.find((t) => t.text_id === textNode.id);
+          if (translation) {
+            try {
+              await figma.loadFontAsync(textNode.fontName as FontName);
+              originalTextMap.set(textNode.id, textNode.characters);
+              console.log("translation.translatedText:", translation.translated_text)
+              textNode.characters = translation.translated_text;
+            } catch (error) {
+              console.warn( `Failes to apply translation for ${textNode.id}:`, error);
+            }
+          } else { 
+            console.warn(`No translation found for text node ${textNode.id}`);
+          }
+        }
       }
-
-      const textNodes = frame.findAll((node) =>
-        node.type === "TEXT") as TextNode[];
-
-      if (textNodes.length === 0) {
-        figma.notify("No text found to translate in this frame.");
-        return;
-      }
-
-      // Apply the translated text to the text nodes
-      for (const textNode of textNodes) {
-        await figma.loadFontAsync(textNode.fontName as fontName);
-        textNode.characters = translatedText;
-        originalTextMap.set(textNode.id, textNode.translatedText);
-      }
-
-      figma.notify("Text updated with translation.");
-
-    } catch (error) {
-      console.error("Error applying translation:", error);
-      figma.notify("Failed to apply translation. Check console for details.");
     }
+    figma.notify("Text updated with translations.");
   }
 
+
   if (msg.type === "toggle-text") {
-    const { showOriginal, translatedText, originalText } = msg;
-    console.log("Original text:", originalText);
-    console.log("Translated text for toggleing on Figma:", translatedText);
+    const {  frameId, matchedTextNodes, showOriginal } = msg;
+    console.log("Show original:", showOriginal);
+    console.log("Translated text for toggleing on Figma:", matchedTextNodes);
+    console.log("FrameId toggling:", frameId);
 
     for (const node of selection) {
       if (node.type === "FRAME") {
@@ -99,43 +96,23 @@ figma.ui.onmessage = async (msg) => {
         for (const textNode of textNodes) {
           await figma.loadFontAsync(textNode.fontName as FontName);
 
-          // Preserve original styles
-          const fontName = textNode.fontName;
-          const fontSize = textNode.fontSize;
-          const fills = textNode.fills;
-          console.log("Font name:", fontName);
-          console.log("Font size:", fontSize);
-          console.log("Font fill:", fills);
-
-
-          // Clear the text node content before applying new text
-          textNode.characters = "";
-          
-
-              if ( showOriginal) {
-                console.log("showOriginal:", showOriginal);
-                console.log("Original text:", originalText);
-                console.log("Translated text:", translatedText);
-
-                if (originalText !== undefined) {
-                  textNode.characters = originalText;
-
-                   // Reapply styles
-                  textNode.fontName = fontName;
-                  textNode.fontSize = fontSize as number;
-                  textNode.fills = fills;
-                }  else {
-                  console.warn(`No original text found for ${textNode.id}`);
-                }
-              } else {
-                console.log("showOriginal for translation:", showOriginal);
-                textNode.characters = translatedText || "";
-
-                 // Reapply styles
-                textNode.fontName = fontName;
-                textNode.fontSize = fontSize as number;
-                textNode.fills = fills;
+          const matchedNode = matchedTextNodes.find((mathed) => mathed.text_id === textNode.id);
+          if( matchedNode ) {
+            if ( showOriginal ) {
+              if ( matchedNode.original_text ) {
+                textNode.characters = matchedNode.original_text;
+                console.log("textNode characters:", textNode.characters);
+                
+                console.warn(`No original text found for ${textNode.id}`);
               }
+            } else {
+              textNode.characters = matchedNode.translated_text || "";
+              console.log("textNode characters:", textNode.characters);
+            }
+          } else {
+            console.warn(`No matching node found for ${textNode.id}`);
+          }
+
         }
       }
     }
