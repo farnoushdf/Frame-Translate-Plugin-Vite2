@@ -14,9 +14,7 @@ export function App() {
   const [translatedTextNodes, setTranslatedTextNodes] = useState<{ text_id: string; translated_text: string }[]>([]);
   const [matchedTextNodes, setMatchedTextNodes] = useState<{ text_id: string; original_text: string; translated_text: string | null }[]>([]);
   const [frameId, setFrameId] = useState<string | null>(null);
-  const [preview, setPreview] =useState<boolean>(false);
-  const [currentTextState, setCurrentTextState] = useState<"original" | "translated">("original");
-  const [isFirstToggle, setIsFirstToggle] = useState<boolean>(true);
+  const [currentTextState, setCurrentTextState] = useState<"validated" | "canceled">("canceled");
   const [loading, setLoading] = useState<boolean>(false);
 
   const validateLanguage = (language: string): boolean => {
@@ -79,11 +77,18 @@ useEffect(() => {
           setMatchedTextNodes(updatedMatchedNodes);
           console.log("Updated matched text nodes:", updatedMatchedNodes);
 
-          // Call createRecord to store in the database
-         if (frameIdFromMessage) {
-           const  data  = await createRecord( frameIdFromMessage, updatedMatchedNodes );
-           console.log("Recorded data:", data);
-         }
+          // Confirm translations and send to Figma for immediate update
+          parent.postMessage(
+            {
+              pluginMessage: {
+                type: "update-frame-text", // Use update-frame-text action
+                frameId,
+                translations: updatedMatchedNodes,
+              },
+            },
+            "*"
+          );
+
         } catch (error) {
           console.log("Translation error", error);
         } finally {
@@ -94,6 +99,54 @@ useEffect(() => {
         }
 
       } 
+
+      // Handle validated-translation message
+      if (pluginMessage?.type === "validated-translation") {
+        const { frameId, editedTexts, originalTexts } = pluginMessage;
+        console.log("Edited texts from Figma:", editedTexts);
+        console.log("Original texts from Figma:", originalTexts);
+
+        const extractedEditedTextNodes = editedTexts.map(
+          (textObj: { id: string; content: string }) => ({
+            text_id: textObj.id,
+            text_content: textObj.content,
+            frame_id: frameId,
+          })
+        );
+        const extractedOriginalTextNodes = originalTexts.map(
+          (textObj: { id: string; content: string }) => ({
+            text_id: textObj.id,
+            text_content: textObj.content,
+            frame_id: frameId,
+          })
+        );
+        const matchedTextNodes = extractedOriginalTextNodes.map((node: { text_id: string; text_content: string }) => {
+            const editedNodes = extractedEditedTextNodes.find(
+              (tNode: { text_id: string; text_content: string }) => tNode.text_id === node.text_id
+            );
+            return {
+              text_id: node.text_id,
+              original_text: node.text_content,
+              translated_text: editedNodes ? editedNodes.text_content : null,
+            };
+          });
+
+        
+        console.log("Updated validated text nodes:", matchedTextNodes);
+        console.log("Current frame id:", frameId);
+
+        try {
+          // Call createRecord to store in the database
+          if (frameId && matchedTextNodes.length > 0) {
+            const data = await createRecord(frameId, matchedTextNodes);
+            console.log("Recorded data:", data);
+          }
+        } catch (error) {
+          console.error("Error storing validated translations:", error);
+        }
+      }
+
+
     }
 };
   
@@ -110,64 +163,38 @@ useEffect(() => {
 const translateText = async () => {
   
   
-  try {
-    parent.postMessage(
-      {
-        pluginMessage: {
-          type: "translate",
-        },
-      },
-      "*"
-    );
-  
-    setPreview(true); // Enable preview mode
-    
-  } catch (error) {
-    console.log("Translation error", error);
-  }
-  
-};
+      setLoading(true); // Show spinner during translation process
 
+      try {
+        // Confirm translations and send to Figma for immediate update
+        parent.postMessage(
+          {
+            pluginMessage: {
+              type: "translate", // Use update-frame-text action
+              frameId,
+              translations: matchedTextNodes,
+            },
+          },
+          "*"
+        );
 
-
-
-
-// Handle the toggle click
-const handleToggleClick = () => {
-    if (isFirstToggle) {
-      handleConfirmTranslation();
-      setIsFirstToggle(false); // Disable first toggle behavior after it's used
-    } else {
-      handlePreviewToggle();
+      // setCurrentTextState("translated"); // Update state to reflect the change
+      console.log("Translations sent to Figma and frame updated.");
+    } catch (error) {
+      console.error("Error updating Figma with translations:", error);
+    } finally {
+      setLoading(false); // Hide spinner after updating
     }
-  };
   
-  const handleConfirmTranslation = () => {
-    if ( frameId && matchedTextNodes.length > 0 ) {
-      console.log("Confirmed translation and sending data to Figma:", matchedTextNodes);
-
-      setCurrentTextState("translated"); // Ensure translated text is active
-      
-      
-      parent.postMessage(
-      {
-        pluginMessage: {
-          type: "update-frame-text",
-          frameId,
-          translations: matchedTextNodes,
-        },
-      },
-      "*"
-    );
-    console.log("Confirmed translation and updated Figma.");
-  }
+  
 };
 
-const handlePreviewToggle = () => {
-  const showOriginal = currentTextState === "translated";
+
+const handleToggleClick = () => {
+  const validate = currentTextState === "canceled";
   console.log("translated and original text for toggleing:", matchedTextNodes);
 
-  setCurrentTextState(showOriginal ? "original" : "translated");
+  setCurrentTextState(validate ? "validated" : "canceled");
   // Send a toggle-text message to the Figma plugin
   parent.postMessage(
     {
@@ -175,11 +202,13 @@ const handlePreviewToggle = () => {
         type: "toggle-text",
         frameId,
         matchedTextNodes,
-        showOriginal, // true: show original; false: show translated
+        validate, // true: show original; false: show translated
       },
     },
     "*"
   );
+
+  
 };
 
   const createRecord = async (
@@ -195,32 +224,40 @@ const handlePreviewToggle = () => {
       return;
     }
 
-
-    try {
-      // Insert text node records into Supabase
-    const textNodeInsertions = matchedTextNodes.map((node) => ({
-      frame_id: frameId,
-      text_node_id: node.text_id,
-      original_text: node.original_text,
-      translated_text: node.translated_text,
-      language,
-    }));
     
+    
+    try {
+      //Insert frame data into the frames table
+      const { error: frameError } = await supabase
+      .from("frames")
+      .insert({ frame_id: frameId });
+
+      if (frameError) {
+      console.log("Error adding frame:", frameError);
+      return;
+      }
+
+      
+      // Insert text node records into Supabase
+      const textNodeInsertions = matchedTextNodes.map((node) => ({
+        frame_id: frameId,
+        text_node_id: node.text_id,
+        original_text: node.original_text,
+        translated_text: node.translated_text,
+        language,
+      }));
+      
       const { data, error } = await supabase
-        .from("text_nodes")
-        .insert(textNodeInsertions);
-
-        if (error) {
-          console.log("error adding text nodes:", error);
-          return;
-        }
-        console.log("Text nodes record added:", data);
-
-        //Insert frame data into the frames table
-         await supabase
-        .from("frames")
-        .insert({ frame_id: frameId });
-        
+      .from("text_nodes")
+      .insert(textNodeInsertions);
+      
+      if (error) {
+        console.log("error adding text nodes:", error);
+        return;
+      }
+      console.log("Text nodes record added:", data);
+      
+      
     } catch (error) {
       console.log("Error adding record:", error);
     }
@@ -262,27 +299,19 @@ const handlePreviewToggle = () => {
         <div className="spinner" style={{marginTop: "20px"}}></div>
       )}
 
-      {preview && !loading && (
-        <div style={{ marginTop: "20px" }}>
-          <h3>Preview Translation</h3>
-          <textarea 
-          value={translatedTextNodes.map((node) => node.translated_text).join("\n")}
-          style={{ width: "100%", height: "80px", marginBottom: "10px" }}></textarea>
-        </div>
-      )}
-
       <label className="toggle-switch">
         <span className="toggle-label-left">
-          {currentTextState === "original" ? 
-          "Apply to translated text" : "Back to original text"}
+          {currentTextState === "canceled" ? 
+          "Validate Translation" : "Revert to original text"}
         </span>
         <input type="checkbox" 
-        checked={currentTextState === "translated"} 
+        checked={currentTextState === "canceled"} 
         onChange={handleToggleClick}
         disabled={translatedTextNodes.length === 0} // Disable toggle if no translation is available
         />
         <span className="slider"></span>
       </label>
+      
                                  
     </>
   );
