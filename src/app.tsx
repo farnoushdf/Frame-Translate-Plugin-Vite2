@@ -223,17 +223,20 @@ const handleToggleClick = () => {
       console.log("Unsupported language selected:", language);
       return;
     }
-
+    
+    console.log("Frmae ID for adding to Supabase:", frameId);
+    console.log("Matechet text nodes for adding to Supabase:", matchedTextNodes);
     
     
     try {
       //Insert frame data into the frames table
       const { error: frameError } = await supabase
       .from("frames")
-      .insert({ frame_id: frameId });
+      .upsert({ frame_id: frameId }, { onConflict: "frame_id" });
+      console.log("New frame added");
 
       if (frameError) {
-      console.log("Error adding frame:", frameError);
+      console.log("Error adding/updating frame:", frameError);
       return;
       }
 
@@ -247,15 +250,16 @@ const handleToggleClick = () => {
         language,
       }));
       
-      const { data, error } = await supabase
+      const { data: textData, error: textError } = await supabase
       .from("text_nodes")
-      .insert(textNodeInsertions);
+      .upsert(textNodeInsertions, { onConflict: "text_node_id" });
+      console.log("New text nodes added", textData);
       
-      if (error) {
-        console.log("error adding text nodes:", error);
+      if (textError) {
+        console.log("error adding/updating text nodes:", textError);
         return;
       }
-      console.log("Text nodes record added:", data);
+      console.log("Text nodes record added:", textData);
       
       
     } catch (error) {
@@ -298,20 +302,19 @@ const handleToggleClick = () => {
       {loading && (
         <div className="spinner" style={{marginTop: "20px"}}></div>
       )}
-
+                                                     
       <label className="toggle-switch">
         <span className="toggle-label-left">
           {currentTextState === "canceled" ? 
           "Validate Translation" : "Revert to original text"}
         </span>
         <input type="checkbox" 
-        checked={currentTextState === "canceled"} 
+        checked={currentTextState === "validated"} 
         onChange={handleToggleClick}
         disabled={translatedTextNodes.length === 0} // Disable toggle if no translation is available
         />
-        <span className="slider"></span>
+        <span className={`slider ${currentTextState === "validated" ? "green" : "orange"}`}></span>
       </label>
-      
                                  
     </>
   );

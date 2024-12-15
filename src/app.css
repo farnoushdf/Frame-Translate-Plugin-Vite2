@@ -22,12 +22,13 @@ body {
   position: relative;
   width: 100%;
   justify-content: center;
+  font-family: Arial, sans-serif;
+  font-size: 14px;
 }
 
 /* Labels */
 .toggle-label-left,
 .toggle-label-right {
-  font-size: 14px;
   margin: 0 10px;
   white-space: nowrap;
 }
@@ -39,32 +40,48 @@ body {
 
 .toggle-switch .slider {
   position: relative;
-  width: 50px;
-  height: 25px;
+  width: 60px; 
+  height: 30px; 
   background-color: #ccc;
-  border-radius: 25px;
+  border-radius: 30px;
   cursor: pointer;
-  transition: background-color 0.3s;
+  transition: background-color 0.3s ease;
 }
 
+/* Circle inside the slider */
 .toggle-switch .slider:before {
   content: "";
   position: absolute;
-  width: 21px;
-  height: 21px;
+  width: 26px;
+  height: 26px;
   background-color: white;
   border-radius: 50%;
   top: 2px;
   left: 2px;
-  transition: transform 0.3s;
+  transition: transform 0.3s ease;
 }
 
+/* Green color when validated (ON) */
 .toggle-switch input:checked + .slider {
-  background-color: #ccc;
+  background-color: #17DB94; /* Green color */
 }
 
 .toggle-switch input:checked + .slider:before {
-  transform: translateX(25px);
+  transform: translateX(30px); /* Move circle to the right */
+}
+
+/* Orange color when canceled (OFF) */
+.toggle-switch .slider.orange {
+  background-color: #4B4B4B; /* Orange color */
+}
+
+.toggle-switch .slider.orange:before {
+  transform: translateX(0); /* Move circle to the left */
+}
+
+/* Disabled state */
+.toggle-switch input:disabled + .slider {
+  background-color: #e0e0e0; /* Light gray for disabled state */
 }
 
 /* Spinner */

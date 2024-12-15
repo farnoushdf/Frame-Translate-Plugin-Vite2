@@ -172,6 +172,11 @@ figma.ui.onmessage = async (msg) => {
         }
       }
     figma.notify(validate ? "Validated translated texts" : "Cancelled translated texts");
+
+    // Zoom back to the active frame after toggling
+    if (activeFrame) {
+      figma.viewport.scrollAndZoomIntoView([activeFrame]);
+    }
   }
 
   if (msg.type === "cancel") {
